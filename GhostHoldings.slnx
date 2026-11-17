@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="GhostHoldings.Api/GhostHoldings.Api.csproj" />
+  <Project Path="GhostHoldings.Application/GhostHoldings.Application.csproj" />
+  <Project Path="GhostHoldings.Domain/GhostHoldings.Domain.csproj" />
+  <Project Path="GhostHoldings.Infrastructure/GhostHoldings.Infrastructure.csproj" />
+  <Project Path="GhostHoldings.Tests/GhostHoldings.Tests.csproj" />
+</Solution>
