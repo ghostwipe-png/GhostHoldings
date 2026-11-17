@@ -9,10 +9,8 @@ using GhostHoldings.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Add Controllers and Swagger
+// 1. Add Controllers
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 // 2. Add Database Context (PostgreSQL)
 builder.Services.AddDbContext<IApplicationDbContext, GhostHoldingsDbContext>(options =>
@@ -57,22 +55,14 @@ var app = builder.Build();
 // ==========================================
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-    // This automatically applies all pending EF Core migrations to the Render database
+    // We use the concrete DbContext here to guarantee access to .Database.Migrate()
+    var dbContext = scope.ServiceProvider.GetRequiredService<GhostHoldingsDbContext>();
     dbContext.Database.Migrate(); 
 }
 // ==========================================
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-// Note: Commented out for Render.com compatibility. 
-// Render handles HTTPS at the load balancer level, and this can cause redirect loops on the free tier.
-// app.UseHttpsRedirection(); 
+// (Swagger removed to avoid NuGet conflicts and keep production build lean)
 
 app.UseAuthentication(); // MUST come before UseAuthorization
 app.UseAuthorization();
