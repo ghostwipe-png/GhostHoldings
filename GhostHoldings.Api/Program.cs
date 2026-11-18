@@ -1,5 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.Text;
@@ -8,6 +13,7 @@ using GhostHoldings.Application.Services;
 using GhostHoldings.Infrastructure.Data;
 using GhostHoldings.Infrastructure.Services;
 
+// 1. Configure Serilog
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .Enrich.FromLogContext()
@@ -21,9 +27,10 @@ try
 
     builder.Host.UseSerilog();
 
-    // ✅ FIX #1: AddControllers was missing in the previous version
+    // ✅ CRITICAL 1: Controllers MUST be added
     builder.Services.AddControllers();
 
+    // ✅ CRITICAL 2: CORS
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowAll", policy =>
@@ -35,10 +42,11 @@ try
         });
     });
 
+    // ✅ CRITICAL 3: Database
     builder.Services.AddDbContext<IApplicationDbContext, GhostHoldingsDbContext>(options =>
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-    // ✅ FIX #2: Redis is OPTIONAL. Falls back to in-memory cache when not configured (e.g. Render free tier)
+    // ✅ CRITICAL 4: Distributed Cache (Fallback to Memory if Redis is missing)
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     if (!string.IsNullOrEmpty(redisConnectionString))
     {
@@ -47,19 +55,22 @@ try
             options.Configuration = redisConnectionString;
             options.InstanceName = "GhostHoldings_";
         });
-        Log.Information("Distributed cache: Redis ({Host})", redisConnectionString.Split(',')[0]);
+        Log.Information("Using Redis Cache: {Host}", redisConnectionString.Split(',')[0]);
     }
     else
     {
         builder.Services.AddDistributedMemoryCache();
-        Log.Information("Distributed cache: In-Memory (Redis not configured)");
+        Log.Information("Using In-Memory Cache (Redis not configured)");
     }
 
+    // ✅ CRITICAL 5: MediatR
     builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(GhostHoldings.Application.Features.Users.RegisterUserCommand).Assembly));
 
+    // ✅ CRITICAL 6: Custom Services
     builder.Services.AddScoped<IFeeCalculationService, FeeCalculationService>();
     builder.Services.AddHttpClient<IPaystackService, PaystackService>();
 
+    // ✅ CRITICAL 7: JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");
     var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key is missing"));
 
@@ -82,11 +93,12 @@ try
         };
     });
 
-    // ✅ The AddAuthorization line you already added stays here
+    // ✅ CRITICAL 8: Authorization
     builder.Services.AddAuthorization();
 
     var app = builder.Build();
 
+    // Auto-migrate database
     using (var scope = app.Services.CreateScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<GhostHoldingsDbContext>();
