@@ -1,90 +1,105 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
 using System.Text;
 using GhostHoldings.Application.Interfaces;
 using GhostHoldings.Application.Services;
 using GhostHoldings.Infrastructure.Data;
 using GhostHoldings.Infrastructure.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+// 1. CONFIGURE SERILOG EARLY (catches startup errors)
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .Enrich.FromLogContext()
+    .CreateLogger();
 
-// 1. Add Controllers
-builder.Services.AddControllers();
-
-// 2. ADD CORS POLICY (Crucial for Flutter Web)
-builder.Services.AddCors(options =>
+try
 {
-    options.AddPolicy("AllowFlutterWeb", policy =>
+    Log.Information("Starting GhostHoldings API...");
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Replace default logger with Serilog
+    builder.Host.UseSerilog();
+
+    // 2. ADD CORS
+    builder.Services.AddCors(options =>
     {
-        policy.WithOrigins(
-                "http://localhost:5000",
-                "http://localhost:5001",
-                "http://localhost:8080",
-                "http://127.0.0.1:5000",
-                "http://127.0.0.1:8080",
-                "https://ghostholdings.onrender.com" // Allow the live app to talk to itself if needed
-            )
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials(); // Required for sending cookies/auth headers
+        options.AddPolicy("AllowAll", policy =>
+        {
+            policy.SetIsOriginAllowed(origin => true)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        });
     });
-});
 
-// 3. Add Database Context (PostgreSQL)
-builder.Services.AddDbContext<IApplicationDbContext, GhostHoldingsDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    // 3. ADD DATABASE
+    builder.Services.AddDbContext<IApplicationDbContext, GhostHoldingsDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 4. Add MediatR
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(GhostHoldings.Application.Features.Users.RegisterUserCommand).Assembly));
-
-// 5. Add Application Services
-builder.Services.AddScoped<IFeeCalculationService, FeeCalculationService>();
-
-// 6. Add Infrastructure Services (Paystack HttpClient)
-builder.Services.AddHttpClient<IPaystackService, PaystackService>();
-
-// 7. Add JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key is missing in configuration"));
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
+    // 4. ADD REDIS DISTRIBUTED CACHE
+    // Reads from appsettings.json or Render environment variable "ConnectionStrings__Redis"
+    var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
+    builder.Services.AddStackExchangeRedisCache(options =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(key)
-    };
-});
+        options.Configuration = redisConnectionString;
+        options.InstanceName = "GhostHoldings_";
+    });
 
-var app = builder.Build();
+    // 5. ADD MEDIATR
+    builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(GhostHoldings.Application.Features.Users.RegisterUserCommand).Assembly));
 
-// ==========================================
-// AUTO-MIGRATE DATABASE ON STARTUP
-// ==========================================
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<GhostHoldingsDbContext>();
-    dbContext.Database.Migrate(); 
+    // 6. ADD SERVICES
+    builder.Services.AddScoped<IFeeCalculationService, FeeCalculationService>();
+    builder.Services.AddHttpClient<IPaystackService, PaystackService>();
+
+    // 7. ADD JWT AUTH
+    var jwtSettings = builder.Configuration.GetSection("Jwt");
+    var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key is missing"));
+
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings["Issuer"],
+            ValidAudience = jwtSettings["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(key)
+        };
+    });
+
+    var app = builder.Build();
+
+    // AUTO-MIGRATE DATABASE
+    using (var scope = app.Services.CreateScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<GhostHoldingsDbContext>();
+        dbContext.Database.Migrate();
+    }
+
+    app.UseCors("AllowAll");
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapControllers();
+
+    Log.Information("GhostHoldings API started successfully on {Port}", app.Urls);
+    app.Run();
 }
-// ==========================================
-
-// 8. USE CORS (MUST BE BEFORE UseAuthentication and UseAuthorization)
-app.UseCors("AllowFlutterWeb");
-
-app.UseAuthentication(); 
-app.UseAuthorization();
-
-app.MapControllers();
-
-app.Run();
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Host terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
