@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -40,7 +41,6 @@ try
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
     // 4. ADD REDIS DISTRIBUTED CACHE
-    // Reads from appsettings.json or Render environment variable "ConnectionStrings__Redis"
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
     builder.Services.AddStackExchangeRedisCache(options =>
     {
@@ -77,6 +77,9 @@ try
             IssuerSigningKey = new SymmetricSecurityKey(key)
         };
     });
+
+    // 🔥 CRITICAL FIX: ADD AUTHORIZATION SERVICES 🔥
+    builder.Services.AddAuthorization();
 
     var app = builder.Build();
 
