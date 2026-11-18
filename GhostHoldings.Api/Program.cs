@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -9,7 +8,6 @@ using GhostHoldings.Application.Services;
 using GhostHoldings.Infrastructure.Data;
 using GhostHoldings.Infrastructure.Services;
 
-// 1. CONFIGURE SERILOG EARLY (catches startup errors)
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .Enrich.FromLogContext()
@@ -21,10 +19,11 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    // Replace default logger with Serilog
     builder.Host.UseSerilog();
 
-    // 2. ADD CORS
+    // ✅ FIX #1: AddControllers was missing in the previous version
+    builder.Services.AddControllers();
+
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowAll", policy =>
@@ -36,26 +35,31 @@ try
         });
     });
 
-    // 3. ADD DATABASE
     builder.Services.AddDbContext<IApplicationDbContext, GhostHoldingsDbContext>(options =>
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-    // 4. ADD REDIS DISTRIBUTED CACHE
-    var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-    builder.Services.AddStackExchangeRedisCache(options =>
+    // ✅ FIX #2: Redis is OPTIONAL. Falls back to in-memory cache when not configured (e.g. Render free tier)
+    var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+    if (!string.IsNullOrEmpty(redisConnectionString))
     {
-        options.Configuration = redisConnectionString;
-        options.InstanceName = "GhostHoldings_";
-    });
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisConnectionString;
+            options.InstanceName = "GhostHoldings_";
+        });
+        Log.Information("Distributed cache: Redis ({Host})", redisConnectionString.Split(',')[0]);
+    }
+    else
+    {
+        builder.Services.AddDistributedMemoryCache();
+        Log.Information("Distributed cache: In-Memory (Redis not configured)");
+    }
 
-    // 5. ADD MEDIATR
     builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(GhostHoldings.Application.Features.Users.RegisterUserCommand).Assembly));
 
-    // 6. ADD SERVICES
     builder.Services.AddScoped<IFeeCalculationService, FeeCalculationService>();
     builder.Services.AddHttpClient<IPaystackService, PaystackService>();
 
-    // 7. ADD JWT AUTH
     var jwtSettings = builder.Configuration.GetSection("Jwt");
     var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key is missing"));
 
@@ -78,12 +82,11 @@ try
         };
     });
 
-    // 🔥 CRITICAL FIX: ADD AUTHORIZATION SERVICES 🔥
+    // ✅ The AddAuthorization line you already added stays here
     builder.Services.AddAuthorization();
 
     var app = builder.Build();
 
-    // AUTO-MIGRATE DATABASE
     using (var scope = app.Services.CreateScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<GhostHoldingsDbContext>();
@@ -95,7 +98,7 @@ try
     app.UseAuthorization();
     app.MapControllers();
 
-    Log.Information("GhostHoldings API started successfully on {Port}", app.Urls);
+    Log.Information("GhostHoldings API started successfully on {Urls}", string.Join(", ", app.Urls));
     app.Run();
 }
 catch (Exception ex)
