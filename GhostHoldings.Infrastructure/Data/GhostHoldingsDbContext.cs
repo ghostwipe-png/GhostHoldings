@@ -17,6 +17,7 @@ public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
     public DbSet<Transaction> Transactions { get; set; }
     public DbSet<FeeTier> FeeTiers { get; set; }
     public DbSet<PendingRequest> PendingRequests { get; set; }
+    public DbSet<KycSubmission> KycSubmissions { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,6 +57,16 @@ public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<PendingRequest>()
             .Property(pr => pr.PayloadJson)
             .HasColumnType("jsonb");
+
+
+            modelBuilder.Entity<KycSubmission>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // ==========================================
         // 5. SEED INITIAL FEE TIERS (Safaricom-Style)

@@ -10,6 +10,7 @@ public interface IApplicationDbContext
     DbSet<Transaction> Transactions { get; }
     DbSet<FeeTier> FeeTiers { get; }
     DbSet<PendingRequest> PendingRequests { get; }
+    DbSet<KycSubmission> KycSubmissions { get; }
     
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
