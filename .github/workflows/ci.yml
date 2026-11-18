@@ -27,7 +27,8 @@ jobs:
       run: dotnet build --configuration Release --no-restore
 
     - name: Run Unit Tests
-      run: dotnet test --configuration Release --no-build --verbosity normal
+      # We removed --no-build so the .NET 10 test runner doesn't get confused
+      run: dotnet test --configuration Release --verbosity normal
 
   # JOB 2: Validate Docker Build (Only runs if Job 1 passes)
   docker-build:
