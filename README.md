@@ -5,15 +5,16 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A high-performance, secure, and scalable fintech backend designed for mobile money (M-Pesa) integrations. Built with **Clean Architecture**, this system handles complex financial workflows including dynamic fee calculation, auto-chunked large transfers, cryptographic webhook verification, and a Maker-Checker admin governance model.
+A high-performance, secure, and scalable fintech backend designed for mobile money (M-Pesa) integrations. Built with **Clean Architecture**, this system handles complex financial workflows including dynamic fee calculation, auto-chunked large transfers, cryptographic webhook verification, and a comprehensive Maker-Checker admin governance model for KYC and transaction oversight.
 
 ---
 
 ## 🚀 Key Features
 
-- 💳 **Paystack M-Pesa Integration**: Seamless deposit initiation and automated withdrawal payouts.
+- 💳 **Paystack M-Pesa Integration**: Seamless deposit initiation (STK Push) and automated withdrawal payouts.
 - 🔀 **Auto-Chunking Engine**: Automatically splits large withdrawals (>KES 150,000) into compliant, multi-transaction chunks to respect payment gateway limits.
-- 🛡️ **Maker-Checker Admin Portal**: Secure administrative endpoints for reviewing pending requests, overriding KYC, and executing audited, reversible refunds.
+- 🛡️ **Maker-Checker Admin Portal**: Secure administrative endpoints for reviewing pending requests, executing audited reversible refunds, and managing user compliance.
+- 🪪 **KYC & Compliance Workflow**: End-to-end Know Your Customer (KYC) document submission, admin review queue, and immutable audit trails (`ReviewedByAdminId`, `ReviewedAt`).
 - ⚖️ **Dynamic Fee Engine**: Calculates Safaricom-style tiered withdrawal fees dynamically with pro-rata distribution across chunked transactions.
 - 🔒 **Enterprise Security**: BCrypt password hashing, JWT authentication, and HMAC-SHA512 cryptographic signature verification for all incoming webhooks.
 - ⏱️ **Business Rule Enforcement**: Timezone-aware (EAT) withdrawal restrictions (Tuesdays & Thursdays only) and strict min/max limits.
@@ -43,10 +44,10 @@ graph TD
 ```
 
 ### Layer Responsibilities:
-1. **Domain**: Pure C# business logic, entities (`User`, `Wallet`, `Transaction`), and domain exceptions. Zero external dependencies.
+1. **Domain**: Pure C# business logic, entities (`User`, `Wallet`, `Transaction`, `KycSubmission`), and domain exceptions. Zero external dependencies.
 2. **Application**: Use cases, MediatR handlers, DTOs, and interfaces. Orchestrates the business flow.
 3. **Infrastructure**: External concerns. EF Core `DbContext`, Paystack API HTTP client implementations, and BCrypt hashing.
-4. **API**: ASP.NET Core controllers, JWT middleware, Swagger (dev), and dependency injection setup.
+4. **API**: ASP.NET Core controllers, JWT middleware, and dependency injection setup.
 
 ---
 
@@ -114,7 +115,9 @@ dotnet run
 | `POST` | `/api/v1/deposit/initiate` | Trigger M-Pesa STK Push | ✅ |
 | `POST` | `/api/v1/withdrawal/initiate` | Request withdrawal (auto-chunks >150k) | ✅ |
 | `POST` | `/api/v1/webhook/paystack` | Receive & verify Paystack events | 🔐 (HMAC Signature) |
-| `GET` | `/api/v1/admin/pending-requests` | Fetch requests for admin approval | ✅ (Admin Only) |
+| `POST` | `/api/v1/kyc/submit` | Submit KYC documents for review | ✅ |
+| `GET` | `/api/v1/admin/pending-kyc` | Fetch pending KYC submissions | ✅ (Admin Only) |
+| `POST` | `/api/v1/admin/review-kyc` | Approve/Reject KYC submissions | ✅ (Admin Only) |
 | `POST` | `/api/v1/admin/refund-transaction`| Reverse a failed withdrawal | ✅ (Admin Only) |
 
 ---
