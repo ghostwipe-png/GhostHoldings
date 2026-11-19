@@ -43,43 +43,66 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginUserCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command, cancellationToken);
-
-        if (!result.IsSuccess)
+        try
         {
-            return Unauthorized(new { Error = result.ErrorMessage });
+            var result = await _mediator.Send(command, cancellationToken);
+
+            if (!result.IsSuccess)
+            {
+                return Unauthorized(new { Error = result.ErrorMessage });
+            }
+
+            var token = GenerateJwtToken(result.UserId, result.Email);
+
+            return Ok(new 
+            { 
+                Token = token,
+                UserId = result.UserId,
+                Email = result.Email,
+                Message = "Login successful"
+            });
         }
-
-        var token = GenerateJwtToken(result.UserId, result.Email);
-
-        return Ok(new 
-        { 
-            Token = token,
-            UserId = result.UserId,
-            Email = result.Email,
-            Message = "Login successful"
-        });
+        catch (Exception ex)
+        {
+            // 🔥 TEMPORARY DEBUG: Expose the exact error so we can fix it
+            return StatusCode(500, new { 
+                Error = "Internal Server Error",
+                Detail = ex.Message,
+                InnerDetail = ex.InnerException?.Message
+            });
+        }
     }
 
     [HttpPost("login-pin")]
     public async Task<IActionResult> LoginWithPin([FromBody] LoginWithPinCommand command, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(command, cancellationToken);
-
-        if (!result.IsSuccess || result.Email == null)
+        try
         {
-            return Unauthorized(new { Error = result.ErrorMessage });
+            var result = await _mediator.Send(command, cancellationToken);
+
+            if (!result.IsSuccess || result.Email == null)
+            {
+                return Unauthorized(new { Error = result.ErrorMessage });
+            }
+
+            var token = GenerateJwtToken(command.UserId, result.Email);
+
+            return Ok(new 
+            { 
+                Token = token,
+                UserId = command.UserId,
+                Email = result.Email,
+                Message = "PIN login successful"
+            });
         }
-
-        var token = GenerateJwtToken(command.UserId, result.Email);
-
-        return Ok(new 
-        { 
-            Token = token,
-            UserId = command.UserId,
-            Email = result.Email,
-            Message = "PIN login successful"
-        });
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { 
+                Error = "Internal Server Error",
+                Detail = ex.Message,
+                InnerDetail = ex.InnerException?.Message
+            });
+        }
     }
 
     [HttpPost("forgot-password")]
@@ -100,7 +123,7 @@ public class AuthController : ControllerBase
     // 🔥 SAFE JWT GENERATION METHOD
     private string GenerateJwtToken(Guid userId, string email)
     {
-        var jwtKey = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is missing in configuration.");
+        var jwtKey = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is missing in configuration. Check Render Environment Variables (Jwt__Key).");
         var jwtIssuer = _configuration["Jwt:Issuer"] ?? "GhostHoldingsApi";
         var jwtAudience = _configuration["Jwt:Audience"] ?? "GhostHoldingsClient";
 
