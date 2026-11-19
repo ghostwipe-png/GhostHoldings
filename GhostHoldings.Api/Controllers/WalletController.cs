@@ -8,7 +8,7 @@ namespace GhostHoldings.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize]
+[Authorize] 
 public class WalletController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -38,9 +38,16 @@ public class WalletController : ControllerBase
         }
         catch (Exception ex)
         {
+            // 🔥 LOG THE EXACT ERROR TO RENDER CONSOLE
+            Console.WriteLine($"[WALLET ERROR] Message: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[WALLET ERROR] Inner: {ex.InnerException.Message}");
+            }
+
             return StatusCode(500, new { 
-                Error = ex.Message, 
-                InnerDetail = ex.InnerException?.Message 
+                error = ex.Message, 
+                detail = ex.InnerException?.Message 
             });
         }
     }
