@@ -8,7 +8,7 @@ namespace GhostHoldings.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize] // 🔒 CRITICAL: This ensures ONLY logged-in users with a valid JWT can access these endpoints
+[Authorize] 
 public class WalletController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -37,6 +37,14 @@ public class WalletController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return NotFound(new { Error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // 🔥 TEMPORARY DEBUG: Expose the exact C# error to the Kotlin app
+            return StatusCode(500, new { 
+                Error = ex.Message, 
+                InnerDetail = ex.InnerException?.Message 
+            });
         }
     }
 }
