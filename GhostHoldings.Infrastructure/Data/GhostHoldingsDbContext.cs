@@ -4,8 +4,6 @@ using GhostHoldings.Application.Interfaces;
 
 namespace GhostHoldings.Infrastructure.Data;
 
- // Add this at the top
-
 public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
 {
     // The constructor allows the API layer to inject the database connection string
@@ -26,8 +24,6 @@ public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
         // ==========================================
         // 1. USER CONFIGURATIONS
         // ==========================================
-        // Enforce unique emails at the database level. 
-        // Even if the C# code misses a check, Postgres will reject duplicate emails.
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
@@ -39,7 +35,7 @@ public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
             .HasOne(w => w.User)
             .WithOne(u => u.Wallet)
             .HasForeignKey<Wallet>(w => w.UserId)
-            .OnDelete(DeleteBehavior.Restrict); // Prevent deleting a user if they have a wallet
+            .OnDelete(DeleteBehavior.Restrict); 
 
         // ==========================================
         // 3. TRANSACTION CONFIGURATIONS (One-to-Many)
@@ -48,30 +44,32 @@ public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
             .HasOne(t => t.Wallet)
             .WithMany(w => w.Transactions)
             .HasForeignKey(t => t.WalletId)
-            .OnDelete(DeleteBehavior.Restrict); // CRITICAL: Never cascade delete financial records!
+            .OnDelete(DeleteBehavior.Restrict); 
 
         // ==========================================
         // 4. PENDING REQUEST CONFIGURATIONS (Maker-Checker)
         // ==========================================
-        // Map the PayloadJson string to PostgreSQL's highly efficient JSONB column type
         modelBuilder.Entity<PendingRequest>()
             .Property(pr => pr.PayloadJson)
             .HasColumnType("jsonb");
 
-
-            modelBuilder.Entity<KycSubmission>(entity =>
+        // ==========================================
+        // 5. KYC SUBMISSION CONFIGURATIONS
+        // ==========================================
+        modelBuilder.Entity<KycSubmission>(entity =>
         {
             entity.HasKey(e => e.Id);
+            
+            // 🔥 FIXED: Explicitly map to the KycSubmissions navigation property on User
             entity.HasOne(e => e.User)
-                  .WithMany()
+                  .WithMany(u => u.KycSubmissions) 
                   .HasForeignKey(e => e.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ==========================================
-        // 5. SEED INITIAL FEE TIERS (Safaricom-Style)
+        // 6. SEED INITIAL FEE TIERS (Safaricom-Style)
         // ==========================================
-        // When the database is created, these rows will automatically be inserted.
         modelBuilder.Entity<FeeTier>().HasData(
             new FeeTier { Id = Guid.Parse("11111111-1111-1111-1111-111111111111"), MinAmount = 0, MaxAmount = 1000, FeePercentage = 3.00m, IsActive = true },
             new FeeTier { Id = Guid.Parse("22222222-2222-2222-2222-222222222222"), MinAmount = 1000.01m, MaxAmount = 9999, FeePercentage = 4.00m, IsActive = true },

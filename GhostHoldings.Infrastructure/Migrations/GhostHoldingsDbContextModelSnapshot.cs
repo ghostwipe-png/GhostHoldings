@@ -112,14 +112,9 @@ namespace GhostHoldings.Infrastructure.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("UserId1")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
-
-                    b.HasIndex("UserId1");
 
                     b.ToTable("KycSubmissions");
                 });
@@ -305,14 +300,10 @@ namespace GhostHoldings.Infrastructure.Migrations
             modelBuilder.Entity("GhostHoldings.Domain.Entities.KycSubmission", b =>
                 {
                     b.HasOne("GhostHoldings.Domain.Entities.User", "User")
-                        .WithMany()
+                        .WithMany("KycSubmissions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("GhostHoldings.Domain.Entities.User", null)
-                        .WithMany("KycSubmissions")
-                        .HasForeignKey("UserId1");
 
                     b.Navigation("User");
                 });
