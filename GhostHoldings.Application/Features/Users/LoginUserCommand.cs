@@ -40,7 +40,7 @@ public class LoginUserCommandHandler : IRequestHandler<LoginUserCommand, LoginRe
             return new LoginResult(Guid.Empty, string.Empty, false, "Invalid email or password.");
         }
 
-        // D. Check if account is locked by Admin
+        // 🔥 D. Check if account is locked by Admin
         if (user.IsLocked)
         {
             return new LoginResult(user.Id, user.Email, false, "Your account has been suspended. Please contact support.");

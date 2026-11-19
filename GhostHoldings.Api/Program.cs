@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Identity;
+using GhostHoldings.Domain.Entities; 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -69,6 +71,9 @@ try
     // ✅ CRITICAL 6: Custom Services
     builder.Services.AddScoped<IFeeCalculationService, FeeCalculationService>();
     builder.Services.AddHttpClient<IPaystackService, PaystackService>();
+    builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
+       // Register the password hasher for our custom User entity
+   builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
     // ✅ CRITICAL 7: JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");

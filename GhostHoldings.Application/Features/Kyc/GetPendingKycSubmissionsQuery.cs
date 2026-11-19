@@ -1,10 +1,12 @@
-using MediatR;
 using GhostHoldings.Application.Interfaces;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace GhostHoldings.Application.Features.Kyc;
 
-public record KycSubmissionDto(
+public record GetPendingKycSubmissionsQuery() : IRequest<List<PendingKycDto>>;
+
+public record PendingKycDto(
     Guid Id,
     Guid UserId,
     string UserEmail,
@@ -13,9 +15,7 @@ public record KycSubmissionDto(
     DateTime SubmittedAt
 );
 
-public record GetPendingKycSubmissionsQuery() : IRequest<List<KycSubmissionDto>>;
-
-public class GetPendingKycSubmissionsQueryHandler : IRequestHandler<GetPendingKycSubmissionsQuery, List<KycSubmissionDto>>
+public class GetPendingKycSubmissionsQueryHandler : IRequestHandler<GetPendingKycSubmissionsQuery, List<PendingKycDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -24,13 +24,12 @@ public class GetPendingKycSubmissionsQueryHandler : IRequestHandler<GetPendingKy
         _context = context;
     }
 
-    public async Task<List<KycSubmissionDto>> Handle(GetPendingKycSubmissionsQuery request, CancellationToken cancellationToken)
+    public async Task<List<PendingKycDto>> Handle(GetPendingKycSubmissionsQuery request, CancellationToken cancellationToken)
     {
         return await _context.KycSubmissions
-            .Include(k => k.User)
             .Where(k => k.Status == "Pending")
-            .OrderByDescending(k => k.SubmittedAt)
-            .Select(k => new KycSubmissionDto(
+            .OrderBy(k => k.SubmittedAt)
+            .Select(k => new PendingKycDto(
                 k.Id,
                 k.UserId,
                 k.User.Email,

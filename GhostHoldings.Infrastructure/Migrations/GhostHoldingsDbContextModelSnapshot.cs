@@ -112,9 +112,14 @@ namespace GhostHoldings.Infrastructure.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("UserId1")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId1");
 
                     b.ToTable("KycSubmissions");
                 });
@@ -210,6 +215,9 @@ namespace GhostHoldings.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("BiometricEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -219,6 +227,9 @@ namespace GhostHoldings.Infrastructure.Migrations
 
                     b.Property<DateTime?>("EmailChangedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("text");
 
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
@@ -237,8 +248,23 @@ namespace GhostHoldings.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PasswordResetToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinHash")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("TwoFactorEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TwoFactorSecret")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -284,6 +310,10 @@ namespace GhostHoldings.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GhostHoldings.Domain.Entities.User", null)
+                        .WithMany("KycSubmissions")
+                        .HasForeignKey("UserId1");
+
                     b.Navigation("User");
                 });
 
@@ -315,6 +345,8 @@ namespace GhostHoldings.Infrastructure.Migrations
 
             modelBuilder.Entity("GhostHoldings.Domain.Entities.User", b =>
                 {
+                    b.Navigation("KycSubmissions");
+
                     b.Navigation("Transactions");
 
                     b.Navigation("Wallet")

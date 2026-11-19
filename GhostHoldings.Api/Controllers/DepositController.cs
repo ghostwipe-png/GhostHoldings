@@ -31,13 +31,14 @@ public class DepositController : ControllerBase
         try
         {
             // 2. Send command to Application layer
-            var reference = await _mediator.Send(new InitiateDepositCommand(userId, request.Amount), cancellationToken);
+            // 🔥 FIXED: Amount first, then UserId (matches the Command record definition)
+            var result = await _mediator.Send(new InitiateDepositCommand(request.Amount, userId), cancellationToken);
 
             // 3. Return success (The user's phone should now be receiving the M-Pesa PIN prompt)
             return Ok(new 
             { 
-                Message = "M-Pesa prompt sent to your phone. Please enter your PIN to complete the deposit.",
-                Reference = reference,
+                Message = result.Message,
+                Reference = result.Reference,
                 Amount = request.Amount
             });
         }
