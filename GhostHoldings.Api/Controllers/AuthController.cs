@@ -25,9 +25,19 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterUserCommand command, CancellationToken cancellationToken)
     {
+        // RegisterUserCommand returns a Guid (the new UserId)
         var result = await _mediator.Send(command, cancellationToken);
-        if (!result.IsSuccess) return BadRequest(new { Error = result.ErrorMessage });
-        return Ok(new { Message = result.Message });
+        
+        // If it's a valid Guid (not empty), registration succeeded
+        if (result is Guid userId && userId != Guid.Empty)
+        {
+            return Ok(new { 
+                Message = "User registered successfully. Please check your email to verify your account.", 
+                UserId = userId 
+            });
+        }
+        
+        return BadRequest(new { Error = "Registration failed." });
     }
 
     [HttpPost("login")]
