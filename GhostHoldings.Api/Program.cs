@@ -48,9 +48,9 @@ try
     builder.Services.AddDbContext<IApplicationDbContext, GhostHoldingsDbContext>(options =>
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-    // ✅ CRITICAL 4: Distributed Cache (Fallback to Memory if Redis is missing)
+    // ✅ CRITICAL 4: Distributed Cache (🔥 FIXED: Ignore "localhost" and use Memory Cache)
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
-    if (!string.IsNullOrEmpty(redisConnectionString))
+    if (!string.IsNullOrEmpty(redisConnectionString) && !redisConnectionString.Contains("localhost", StringComparison.OrdinalIgnoreCase))
     {
         builder.Services.AddStackExchangeRedisCache(options =>
         {
@@ -62,7 +62,7 @@ try
     else
     {
         builder.Services.AddDistributedMemoryCache();
-        Log.Information("Using In-Memory Cache (Redis not configured)");
+        Log.Information("Using In-Memory Cache (Redis not configured or is localhost)");
     }
 
     // ✅ CRITICAL 5: MediatR
@@ -72,8 +72,7 @@ try
     builder.Services.AddScoped<IFeeCalculationService, FeeCalculationService>();
     builder.Services.AddHttpClient<IPaystackService, PaystackService>();
     builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
-       // Register the password hasher for our custom User entity
-   builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+    builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
     // ✅ CRITICAL 7: JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");
