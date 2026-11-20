@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -10,19 +11,19 @@ using Microsoft.EntityFrameworkCore;
 namespace GhostHoldings.Application.Features.Auth;
 
 public record LoginWithPinCommand(Guid UserId, string Pin) : IRequest<LoginResponse>;
-
-// 🔥 Added LoginResponse record here so it's always available
 public record LoginResponse(string Token, string UserId, string Email, string Message);
 
 public class LoginWithPinCommandHandler : IRequestHandler<LoginWithPinCommand, LoginResponse>
 {
     private readonly IApplicationDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<LoginWithPinCommandHandler> _logger;
 
-    public LoginWithPinCommandHandler(IApplicationDbContext context, IConfiguration configuration)
+    public LoginWithPinCommandHandler(IApplicationDbContext context, IConfiguration configuration, ILogger<LoginWithPinCommandHandler> logger)
     {
         _context = context;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<LoginResponse> Handle(LoginWithPinCommand request, CancellationToken cancellationToken)
@@ -35,21 +36,25 @@ public class LoginWithPinCommandHandler : IRequestHandler<LoginWithPinCommand, L
             throw new UnauthorizedAccessException("PIN not set. Please login with email and password first.");
         }
 
-        // Verify PIN using BCrypt
-        if (!BCrypt.Net.BCrypt.Verify(request.Pin, user.PinHash))
+        _logger.LogInformation("PIN Login Attempt for User {UserId}. Stored PinHash Length: {Length}", user.Id, user.PinHash.Length);
+
+        try
         {
-            throw new UnauthorizedAccessException("Invalid PIN.");
+            // 🔥 Safe BCrypt Verification
+            if (!BCrypt.Net.BCrypt.Verify(request.Pin.Trim(), user.PinHash))
+            {
+                throw new UnauthorizedAccessException("Invalid PIN.");
+            }
+        }
+        catch (BCrypt.Net.SaltParseException)
+        {
+            _logger.LogError("Invalid salt version for User {UserId}. PinHash: {Hash}", user.Id, user.PinHash);
+            throw new UnauthorizedAccessException("PIN data corrupted. Please reset your PIN via email login.");
         }
 
-        // Generate JWT token
         var token = GenerateJwtToken(user);
 
-        return new LoginResponse(
-            token,
-            user.Id.ToString(),
-            user.Email,
-            "Login successful"
-        );
+        return new LoginResponse(token, user.Id.ToString(), user.Email, "Login successful");
     }
 
     private string GenerateJwtToken(Domain.Entities.User user)
@@ -68,7 +73,7 @@ public class LoginWithPinCommandHandler : IRequestHandler<LoginWithPinCommand, L
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.Now.AddDays(30), // Long-lived for PIN/biometric login
+            expires: DateTime.Now.AddDays(30),
             signingCredentials: creds
         );
 
