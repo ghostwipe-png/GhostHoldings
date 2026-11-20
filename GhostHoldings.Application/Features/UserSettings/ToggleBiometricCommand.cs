@@ -20,9 +20,10 @@ public class ToggleBiometricCommandHandler : IRequestHandler<ToggleBiometricComm
         user.BiometricEnabled = request.Enable;
         await _context.SaveChangesAsync(cancellationToken);
 
-        return new MessageResponse(request.Enable ? "Biometric login enabled." : "Biometric login disabled.", null);
+        return new MessageResponse(
+            request.Enable ? "Biometric login enabled." : "Biometric login disabled.", 
+            null
+        );
     }
 }
-
-// 🔥 Ensure this is defined if not already in your Kyc/Other files
-public record MessageResponse(string Message, string? Error);
+// 🔥 NO DUPLICATE MessageResponse HERE! It uses the one from SetPinCommand.cs
