@@ -1,11 +1,11 @@
 using MediatR;
-using GhostHoldings.Application.Interfaces;
+using GhostHoldings.Application.Interfaces; // 🔥 FIXED: Using Application Interfaces
 using GhostHoldings.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace GhostHoldings.Application.Features.Kyc;
 
-// 1. The Command
+// 1. The Command (Takes Base64 from the client)
 public record SubmitKycCommand(
     Guid UserId, 
     string DocumentType, 
@@ -14,12 +14,17 @@ public record SubmitKycCommand(
     string SelfieBase64
 ) : IRequest<MessageResponse>;
 
-// 2. The Handler
+// 2. The Handler (Uploads to Cloudinary, saves URLs to DB)
 public class SubmitKycCommandHandler : IRequestHandler<SubmitKycCommand, MessageResponse>
 {
     private readonly IApplicationDbContext _context;
+    private readonly ICloudinaryService _cloudinaryService; // 🔥 Injected Cloudinary Service
 
-    public SubmitKycCommandHandler(IApplicationDbContext context) => _context = context;
+    public SubmitKycCommandHandler(IApplicationDbContext context, ICloudinaryService cloudinaryService)
+    {
+        _context = context;
+        _cloudinaryService = cloudinaryService;
+    }
 
     public async Task<MessageResponse> Handle(SubmitKycCommand request, CancellationToken cancellationToken)
     {
@@ -38,15 +43,25 @@ public class SubmitKycCommandHandler : IRequestHandler<SubmitKycCommand, Message
             throw new InvalidOperationException($"You already have a {existingKyc.Status} KYC application. Please wait for review or contact support.");
         }
 
-        // 3. Create the new application
+        // 3. 🔥 PROFESSIONAL UPLOAD FLOW: Upload Base64 to Cloudinary and get secure URLs
+        var frontUrl = await _cloudinaryService.UploadBase64ImageAsync(request.FrontImageBase64, "front");
+        var selfieUrl = await _cloudinaryService.UploadBase64ImageAsync(request.SelfieBase64, "selfie");
+        string? backUrl = null;
+        
+        if (!string.IsNullOrEmpty(request.BackImageBase64))
+        {
+            backUrl = await _cloudinaryService.UploadBase64ImageAsync(request.BackImageBase64, "back");
+        }
+
+        // 4. Create the new application (Saving ONLY the URLs to the database)
         var kyc = new KycApplication
         {
             Id = Guid.NewGuid(),
             UserId = request.UserId,
             DocumentType = request.DocumentType,
-            FrontImageBase64 = request.FrontImageBase64,
-            BackImageBase64 = request.BackImageBase64,
-            SelfieBase64 = request.SelfieBase64,
+            FrontImageUrl = frontUrl,
+            BackImageUrl = backUrl,
+            SelfieImageUrl = selfieUrl,
             Status = "Pending",
             SubmittedAt = DateTime.UtcNow
         };
@@ -58,5 +73,5 @@ public class SubmitKycCommandHandler : IRequestHandler<SubmitKycCommand, Message
     }
 }
 
-// 🔥 3. The Missing Record (Added to fix the build error)
+// 3. The Response Record
 public record MessageResponse(string Message, string? Error);

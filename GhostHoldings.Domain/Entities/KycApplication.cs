@@ -8,10 +8,10 @@ public class KycApplication
 
     public string DocumentType { get; set; } = string.Empty; // "National ID", "Passport", "Driving Licence"
     
-    // Storing Base64 strings for now. In production, you'd upload these to AWS S3 and save the URL.
-    public string FrontImageBase64 { get; set; } = string.Empty; 
-    public string? BackImageBase64 { get; set; } // Null for Passport
-    public string SelfieBase64 { get; set; } = string.Empty;
+    // 🔥 UPDATED: Now storing secure Cloudinary URLs instead of Base64 text
+    public string FrontImageUrl { get; set; } = string.Empty; 
+    public string? BackImageUrl { get; set; } 
+    public string SelfieImageUrl { get; set; } = string.Empty;
 
     public string Status { get; set; } = "Pending"; // "Pending", "Approved", "Rejected"
     public string? RejectionReason { get; set; }

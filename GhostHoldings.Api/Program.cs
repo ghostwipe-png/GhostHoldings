@@ -73,6 +73,8 @@ try
     builder.Services.AddHttpClient<IPaystackService, PaystackService>();
     builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
     builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+    // 🔥 ADD THIS LINE
+    builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
 
     // ✅ CRITICAL 7: JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");

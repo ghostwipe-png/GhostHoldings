@@ -85,14 +85,14 @@ namespace GhostHoldings.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("BackImageBase64")
+                    b.Property<string>("BackImageUrl")
                         .HasColumnType("text");
 
                     b.Property<string>("DocumentType")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("FrontImageBase64")
+                    b.Property<string>("FrontImageUrl")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -102,7 +102,7 @@ namespace GhostHoldings.Infrastructure.Migrations
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("SelfieBase64")
+                    b.Property<string>("SelfieImageUrl")
                         .IsRequired()
                         .HasColumnType("text");
 
