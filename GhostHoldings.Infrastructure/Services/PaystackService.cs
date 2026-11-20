@@ -1,8 +1,15 @@
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
-using GhostHoldings.Application.Interfaces;
 
 namespace GhostHoldings.Infrastructure.Services;
+
+public interface IPaystackService
+{
+    Task<PaystackInitializeResponse> InitializeDepositAsync(string email, decimal amountKes, string phoneNumber);
+    Task<PaystackTransferResponse> InitiateWithdrawalAsync(string recipientName, string accountNumber, string bankCode, decimal amountKes, string reference);
+}
 
 public class PaystackService : IPaystackService
 {
@@ -12,127 +19,111 @@ public class PaystackService : IPaystackService
     public PaystackService(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
-        _secretKey = configuration["Paystack:SecretKey"] ?? throw new InvalidOperationException("Paystack Secret Key is missing");
+        // 🔥 Supports both "Paystack:SecretKey" and "Paystack__SecretKey" formats
+        _secretKey = configuration["Paystack:SecretKey"] ?? configuration["Paystack__SecretKey"] 
+                     ?? throw new InvalidOperationException("Paystack Secret Key is missing in configuration.");
         
         _httpClient.BaseAddress = new Uri("https://api.paystack.co/");
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_secretKey}");
+        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _secretKey);
     }
 
-    public async Task<PaystackChargeResponse> InitializeMpesaDepositAsync(string email, string phoneNumber, decimal amount, string reference)
+    public async Task<PaystackInitializeResponse> InitializeDepositAsync(string email, decimal amountKes, string phoneNumber)
     {
-        long amountInCents = (long)(amount * 100);
-
-        string formattedPhone = phoneNumber.TrimStart('+').TrimStart('0');
-        if (!formattedPhone.StartsWith("254"))
-        {
-            formattedPhone = "254" + formattedPhone;
-        }
+        // Paystack requires amount in cents (KES 10 = 1000)
+        var amountInCents = (int)Math.Round(amountKes * 100);
+        var reference = $"GH_DEP_{Guid.NewGuid():N}";
 
         var payload = new
         {
             email = email,
             amount = amountInCents,
             currency = "KES",
-            channel = "mobile_money",
-            mobile_money = new
-            {
-                phone = formattedPhone,
-                provider = "mpesa"
-            },
+            channels = new[] { "mobile_money" }, // Optimized for M-Pesa
+            metadata = new { phone_number = phoneNumber },
             reference = reference
         };
 
-        var response = await _httpClient.PostAsJsonAsync("charge", payload);
+        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync("transaction/initialize", content);
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadFromJsonAsync<PaystackApiResponse<PaystackChargeData>>();
-        
-        if (result == null || !result.status)
-        {
-            throw new InvalidOperationException("Paystack initialization failed.");
-        }
-
-        return new PaystackChargeResponse
-        {
-            Reference = result.data.reference,
-            AuthorizationUrl = result.data.authorization_url
-        };
+        var jsonResponse = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<PaystackInitializeResponse>(jsonResponse, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
+               ?? throw new Exception("Failed to deserialize Paystack response");
     }
 
-    public async Task<PaystackTransferResponse> InitiateMpesaTransferAsync(string name, string phoneNumber, decimal amount, string reference)
+    public async Task<PaystackTransferResponse> InitiateWithdrawalAsync(string recipientName, string accountNumber, string bankCode, decimal amountKes, string reference)
     {
-        string formattedPhone = phoneNumber.TrimStart('+').TrimStart('0');
-        if (!formattedPhone.StartsWith("254"))
-        {
-            formattedPhone = "254" + formattedPhone;
-        }
+        var amountInCents = (int)Math.Round(amountKes * 100);
 
+        // Step 1: Create Transfer Recipient (Required by Paystack before transferring)
         var recipientPayload = new
         {
             type = "mobile_money",
-            name = string.IsNullOrEmpty(name) ? "GhostHoldings User" : name,
-            metadata = new { phone_number = formattedPhone },
+            name = recipientName,
+            account_number = accountNumber,
+            bank_code = bankCode, // e.g., "MPESA" for Kenya, or specific bank code
             currency = "KES"
         };
 
-        var recipientResponse = await _httpClient.PostAsJsonAsync("transferrecipient", recipientPayload);
+        var recipientContent = new StringContent(JsonSerializer.Serialize(recipientPayload), Encoding.UTF8, "application/json");
+        var recipientResponse = await _httpClient.PostAsync("transferrecipient", recipientContent);
         
         if (!recipientResponse.IsSuccessStatusCode)
         {
-            var error = await recipientResponse.Content.ReadAsStringAsync();
-            throw new InvalidOperationException($"Failed to create Paystack recipient: {error}");
+            var err = await recipientResponse.Content.ReadAsStringAsync();
+            throw new Exception($"Failed to create Paystack recipient: {err}");
         }
 
-        var recipientResult = await recipientResponse.Content.ReadFromJsonAsync<PaystackApiResponse<PaystackRecipientData>>();
-        var recipientCode = recipientResult.data.recipient_code;
+        var recipientJson = await recipientResponse.Content.ReadAsStringAsync();
+        var recipientData = JsonSerializer.Deserialize<JsonElement>(recipientJson);
+        var recipientCode = recipientData.GetProperty("data").GetProperty("recipient_code").GetString();
 
-        long amountInKobo = (long)(amount * 100);
+        // Step 2: Initiate Transfer
         var transferPayload = new
         {
             source = "balance",
-            amount = amountInKobo,
+            amount = amountInCents,
             recipient = recipientCode,
             reason = "GhostHoldings Withdrawal",
             reference = reference
         };
 
-        var transferResponse = await _httpClient.PostAsJsonAsync("transfer", transferPayload);
-        var transferResult = await transferResponse.Content.ReadFromJsonAsync<PaystackApiResponse<PaystackTransferData>>();
-
-        if (transferResult == null || !transferResult.status)
+        var transferContent = new StringContent(JsonSerializer.Serialize(transferPayload), Encoding.UTF8, "application/json");
+        var transferResponse = await _httpClient.PostAsync("transfer", transferContent);
+        
+        if (!transferResponse.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"Paystack transfer failed: {transferResult?.message}");
+            var err = await transferResponse.Content.ReadAsStringAsync();
+            throw new Exception($"Failed to initiate Paystack transfer: {err}");
         }
 
-        return new PaystackTransferResponse
-        {
-            Status = transferResult.data.status,
-            Reference = transferResult.data.reference,
-            Message = transferResult.message
-        };
+        var transferJson = await transferResponse.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<PaystackTransferResponse>(transferJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
+               ?? throw new Exception("Failed to deserialize Paystack transfer response");
     }
 }
 
-public class PaystackApiResponse<T>
+// 🔥 DTOs for Paystack Responses
+public class PaystackInitializeResponse
 {
-    public bool status { get; set; }
-    public string message { get; set; } = string.Empty;
-    public T data { get; set; } = default!;
+    public bool Status { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public PaystackData Data { get; set; } = new();
 }
 
-public class PaystackChargeData
+public class PaystackTransferResponse
 {
-    public string reference { get; set; } = string.Empty;
-    public string authorization_url { get; set; } = string.Empty;
+    public bool Status { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public PaystackData Data { get; set; } = new();
 }
 
-public class PaystackRecipientData
+public class PaystackData
 {
-    public string recipient_code { get; set; } = string.Empty;
-}
-
-public class PaystackTransferData
-{
-    public string status { get; set; } = string.Empty;
-    public string reference { get; set; } = string.Empty;
+    public string AuthorizationUrl { get; set; } = string.Empty;
+    public string AccessCode { get; set; } = string.Empty;
+    public string Reference { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty; // e.g., "pending", "success"
+    public string TransferCode { get; set; } = string.Empty;
 }
