@@ -30,10 +30,15 @@ public class PaystackIdentityService : IPaystackIdentityService
 
     public async Task<IdentityVerificationResult> VerifyIdentityAsync(string firstName, string lastName, string idNumber, string documentType)
     {
-        // 🔥 Map frontend types to Paystack's exact expected values for Kenya
+        // 🔥 1. Strict Sanitization
+        var cleanIdNumber = idNumber.Replace(" ", "").Replace("-", "").Trim();
+        var cleanFirstName = firstName.Trim();
+        var cleanLastName = lastName.Trim();
+
+        // 🔥 2. Exact Paystack Kenya Document Type Mapping
         var paystackDocType = documentType.ToLower() switch
         {
-            "voters_card" => "voter_id",
+            "voters_card" => "voter_id",      // Paystack expects "voter_id" for Kenya
             "alien_card" => "alien_card",
             "national_id" => "national_id",
             "passport" => "passport",
@@ -44,18 +49,22 @@ public class PaystackIdentityService : IPaystackIdentityService
         {
             type = "document",
             document_type = paystackDocType,
-            document_number = idNumber,
-            first_name = firstName.Trim(),
-            last_name = lastName.Trim(),
+            document_number = cleanIdNumber,
+            first_name = cleanFirstName,
+            last_name = cleanLastName,
             country = "KE"
         };
 
-        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        // 🔥 3. Log the EXACT payload being sent (Helps us spot formatting errors)
+        var payloadJson = JsonSerializer.Serialize(payload);
+        _logger.LogInformation("[PAYSTACK REQUEST] Payload: {Payload}", payloadJson);
+
+        var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
         var response = await _httpClient.PostAsync("identity/verifications", content);
         var jsonResponse = await response.Content.ReadAsStringAsync();
 
-        // 🔥 Log the exact response so we can see the real error in Render logs
-        _logger.LogInformation("[PAYSTACK IDENTITY RESPONSE] Status: {Status}, Body: {Body}", response.StatusCode, jsonResponse);
+        // 🔥 4. Log the EXACT raw response from Paystack
+        _logger.LogInformation("[PAYSTACK RESPONSE] Status: {Status}, Body: {Body}", response.StatusCode, jsonResponse);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -83,7 +92,7 @@ public class PaystackIdentityService : IPaystackIdentityService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[PAYSTACK IDENTITY PARSE ERROR]");
+            _logger.LogError(ex, "[PAYSTACK PARSE ERROR]");
             return new IdentityVerificationResult(false, "Failed to parse Paystack response.");
         }
     }
