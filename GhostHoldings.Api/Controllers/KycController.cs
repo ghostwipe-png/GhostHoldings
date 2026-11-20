@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using MediatR;
 using GhostHoldings.Application.Interfaces;
-using GhostHoldings.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace GhostHoldings.Api.Controllers;
@@ -14,15 +12,15 @@ namespace GhostHoldings.Api.Controllers;
 public class KycController : ControllerBase
 {
     private readonly IApplicationDbContext _context;
-    private readonly IPaystackIdentityService _identityService;
+    private readonly IIdentityVerificationService _identityService;
 
-    public KycController(IApplicationDbContext context, IPaystackIdentityService identityService)
+    public KycController(IApplicationDbContext context, IIdentityVerificationService identityService)
     {
         _context = context;
         _identityService = identityService;
     }
 
-    // 🔥 NEW: AUTOMATED IDENTITY VERIFICATION
+    // 🔥 AUTOMATED IDENTITY VERIFICATION (Now uses Mock Service)
     [HttpPost("verify-identity")]
     public async Task<IActionResult> VerifyIdentity([FromBody] VerifyIdentityDto request, CancellationToken cancellationToken)
     {
@@ -32,7 +30,7 @@ public class KycController : ControllerBase
 
         try
         {
-            // 1. Call Paystack Identity
+            // 1. Call the Identity Service (Mock for now, real API later)
             var result = await _identityService.VerifyIdentityAsync(
                 request.FirstName, 
                 request.LastName, 
@@ -54,9 +52,7 @@ public class KycController : ControllerBase
 
             return Ok(new { 
                 Verified = result.IsVerified, 
-                Message = result.IsVerified 
-                    ? "Identity verified successfully! Your account is now fully active." 
-                    : $"Verification failed: {result.StatusMessage}. Please check your details and try again." 
+                Message = result.StatusMessage
             });
         }
         catch (Exception ex)

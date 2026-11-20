@@ -74,9 +74,11 @@ try
     builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
     builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
     // 🔥 ADD THIS LINE
-    builder.Services.AddHttpClient<IPaystackIdentityService, PaystackIdentityService>();
+    //builder.Services.AddHttpClient<IPaystackIdentityService, PaystackIdentityService>();
     // 🔥 ADD THIS LINE
     builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+    // 🔥 ADD THIS LINE (Replaces the old Paystack/SmileID registration)
+    builder.Services.AddHttpClient<GhostHoldings.Application.Interfaces.IIdentityVerificationService, GhostHoldings.Infrastructure.Services.MockIdentityVerificationService>();
 
     // ✅ CRITICAL 7: JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");
