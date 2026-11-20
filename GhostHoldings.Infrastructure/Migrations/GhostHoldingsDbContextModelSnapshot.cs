@@ -278,6 +278,9 @@ namespace GhostHoldings.Infrastructure.Migrations
                     b.Property<bool>("IsEmailVerified")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsKycVerified")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsLocked")
                         .HasColumnType("boolean");
 
@@ -285,6 +288,9 @@ namespace GhostHoldings.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("KycVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()

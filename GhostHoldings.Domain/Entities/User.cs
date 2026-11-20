@@ -48,4 +48,10 @@ public class User
     public Wallet Wallet { get; set; } = null!;
     public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
     public ICollection<KycSubmission> KycSubmissions { get; set; } = new List<KycSubmission>();
+
+        // ... existing properties ...
+
+    // 🔥 KYC IDENTITY VERIFICATION
+    public bool IsKycVerified { get; set; } = false;
+    public DateTime? KycVerifiedAt { get; set; }
 }

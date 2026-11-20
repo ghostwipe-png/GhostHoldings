@@ -2,22 +2,29 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using MediatR;
-using GhostHoldings.Application.Features.Kyc;
+using GhostHoldings.Application.Interfaces;
+using GhostHoldings.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace GhostHoldings.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize]
 public class KycController : ControllerBase
 {
-    private readonly IMediator _mediator;
+    private readonly IApplicationDbContext _context;
+    private readonly IPaystackIdentityService _identityService;
 
-    public KycController(IMediator mediator) => _mediator = mediator;
+    public KycController(IApplicationDbContext context, IPaystackIdentityService identityService)
+    {
+        _context = context;
+        _identityService = identityService;
+    }
 
-    // 🔥 1. USER: Submit KYC
-    [HttpPost("submit")]
-    [Authorize]
-    public async Task<IActionResult> SubmitKyc([FromBody] SubmitKycDto request, CancellationToken cancellationToken)
+    // 🔥 NEW: AUTOMATED IDENTITY VERIFICATION
+    [HttpPost("verify-identity")]
+    public async Task<IActionResult> VerifyIdentity([FromBody] VerifyIdentityDto request, CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
         if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
@@ -25,57 +32,59 @@ public class KycController : ControllerBase
 
         try
         {
-            var command = new SubmitKycCommand(userId, request.DocumentType, request.FrontImageBase64, request.BackImageBase64, request.SelfieBase64);
-            var result = await _mediator.Send(command, cancellationToken);
-            return Ok(result);
+            // 1. Call Paystack Identity
+            var result = await _identityService.VerifyIdentityAsync(
+                request.FirstName, 
+                request.LastName, 
+                request.IdNumber, 
+                request.DocumentType
+            );
+
+            // 2. Update User in Database if Verified
+            if (result.IsVerified)
+            {
+                var user = await _context.Users.FindAsync(new object[] { userId }, cancellationToken);
+                if (user != null)
+                {
+                    user.IsKycVerified = true;
+                    user.KycVerifiedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            return Ok(new { 
+                Verified = result.IsVerified, 
+                Message = result.IsVerified 
+                    ? "Identity verified successfully! Your account is now fully active." 
+                    : $"Verification failed: {result.StatusMessage}. Please check your details and try again." 
+            });
         }
         catch (Exception ex)
         {
-            return BadRequest(new { Error = ex.Message });
+            return StatusCode(500, new { Error = ex.Message });
         }
     }
 
-    // 🔥 2. USER: Get KYC Status
+    // 🔥 GET KYC STATUS
     [HttpGet("status")]
-    [Authorize]
     public async Task<IActionResult> GetKycStatus(CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
         if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
             return Unauthorized(new { Error = "Invalid token." });
 
-        var result = await _mediator.Send(new GetKycStatusQuery(userId), cancellationToken);
-        return Ok(result);
-    }
-
-    // 🔥 3. ADMIN: Review KYC (Approve/Reject)
-    [HttpPost("admin/review")]
-    [Authorize(Roles = "Admin")] // 🔥 Ensure only admins can call this
-    public async Task<IActionResult> AdminReviewKyc([FromBody] AdminReviewKycDto request, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var command = new AdminReviewKycCommand(request.KycId, request.Status, request.RejectionReason);
-            var result = await _mediator.Send(command, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Error = ex.Message });
-        }
+        var user = await _context.Users.FindAsync(new object[] { userId }, cancellationToken);
+        
+        return Ok(new {
+            IsVerified = user?.IsKycVerified ?? false,
+            VerifiedAt = user?.KycVerifiedAt
+        });
     }
 }
 
-// 🔥 DTOs for the Controller
-public record SubmitKycDto(
-    string DocumentType, 
-    string FrontImageBase64, 
-    string? BackImageBase64, 
-    string SelfieBase64
-);
-
-public record AdminReviewKycDto(
-    Guid KycId, 
-    string Status, 
-    string? RejectionReason
+public record VerifyIdentityDto(
+    string FirstName, 
+    string LastName, 
+    string IdNumber, 
+    string DocumentType
 );
