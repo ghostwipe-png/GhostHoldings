@@ -78,7 +78,8 @@ try
     // 🔥 ADD THIS LINE
     builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
     // 🔥 ADD THIS LINE (Replaces the old Paystack/SmileID registration)
-    builder.Services.AddHttpClient<GhostHoldings.Application.Interfaces.IIdentityVerificationService, GhostHoldings.Infrastructure.Services.MockIdentityVerificationService>();
+    // 🔥 USE AddScoped INSTEAD OF AddHttpClient FOR THE MOCK SERVICE
+    builder.Services.AddScoped<GhostHoldings.Application.Interfaces.IIdentityVerificationService, GhostHoldings.Infrastructure.Services.MockIdentityVerificationService>();
 
     // ✅ CRITICAL 7: JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");
