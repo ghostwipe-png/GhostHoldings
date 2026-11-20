@@ -8,34 +8,74 @@ namespace GhostHoldings.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize]
 public class KycController : ControllerBase
 {
     private readonly IMediator _mediator;
 
     public KycController(IMediator mediator) => _mediator = mediator;
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
-
+    // 🔥 1. USER: Submit KYC
     [HttpPost("submit")]
-    public async Task<IActionResult> Submit([FromBody] SubmitKycRequest request, CancellationToken cancellationToken)
+    [Authorize]
+    public async Task<IActionResult> SubmitKyc([FromBody] SubmitKycDto request, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new SubmitKycCommand(GetUserId(), request.DocumentType, request.DocumentUrl), cancellationToken);
-        return result.Success ? Ok(new { Message = result.Message }) : BadRequest(new { Error = result.Message });
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+            return Unauthorized(new { Error = "Invalid token." });
+
+        try
+        {
+            var command = new SubmitKycCommand(userId, request.DocumentType, request.FrontImageBase64, request.BackImageBase64, request.SelfieBase64);
+            var result = await _mediator.Send(command, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
     }
 
+    // 🔥 2. USER: Get KYC Status
     [HttpGet("status")]
-    public async Task<IActionResult> GetStatus(CancellationToken cancellationToken)
+    [Authorize]
+    public async Task<IActionResult> GetKycStatus(CancellationToken cancellationToken)
     {
-        var status = await _mediator.Send(new GetMyKycStatusQuery(GetUserId()), cancellationToken);
-        
-        if (status == null)
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+            return Unauthorized(new { Error = "Invalid token." });
+
+        var result = await _mediator.Send(new GetKycStatusQuery(userId), cancellationToken);
+        return Ok(result);
+    }
+
+    // 🔥 3. ADMIN: Review KYC (Approve/Reject)
+    [HttpPost("admin/review")]
+    [Authorize(Roles = "Admin")] // 🔥 Ensure only admins can call this
+    public async Task<IActionResult> AdminReviewKyc([FromBody] AdminReviewKycDto request, CancellationToken cancellationToken)
+    {
+        try
         {
-            return Ok(new { Status = "NotSubmitted", Message = "No KYC submission found." });
+            var command = new AdminReviewKycCommand(request.KycId, request.Status, request.RejectionReason);
+            var result = await _mediator.Send(command, cancellationToken);
+            return Ok(result);
         }
-        
-        return Ok(status);
+        catch (Exception ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
     }
 }
 
-public record SubmitKycRequest(string DocumentType, string DocumentUrl);
+// 🔥 DTOs for the Controller
+public record SubmitKycDto(
+    string DocumentType, 
+    string FrontImageBase64, 
+    string? BackImageBase64, 
+    string SelfieBase64
+);
+
+public record AdminReviewKycDto(
+    Guid KycId, 
+    string Status, 
+    string? RejectionReason
+);

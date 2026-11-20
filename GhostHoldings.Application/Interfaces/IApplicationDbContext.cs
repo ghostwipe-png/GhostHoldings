@@ -11,6 +11,8 @@ public interface IApplicationDbContext
     DbSet<FeeTier> FeeTiers { get; }
     DbSet<PendingRequest> PendingRequests { get; }
     DbSet<KycSubmission> KycSubmissions { get; }
+
+    DbSet<KycApplication> KycApplications { get; set; }
     
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

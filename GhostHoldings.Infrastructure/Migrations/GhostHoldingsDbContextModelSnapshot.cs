@@ -79,6 +79,50 @@ namespace GhostHoldings.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("GhostHoldings.Domain.Entities.KycApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackImageBase64")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FrontImageBase64")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SelfieBase64")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("KycApplications");
+                });
+
             modelBuilder.Entity("GhostHoldings.Domain.Entities.KycSubmission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -303,6 +347,17 @@ namespace GhostHoldings.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Wallets");
+                });
+
+            modelBuilder.Entity("GhostHoldings.Domain.Entities.KycApplication", b =>
+                {
+                    b.HasOne("GhostHoldings.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("GhostHoldings.Domain.Entities.KycSubmission", b =>

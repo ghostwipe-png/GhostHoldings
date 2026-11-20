@@ -16,6 +16,7 @@ public class GhostHoldingsDbContext : DbContext, IApplicationDbContext
     public DbSet<FeeTier> FeeTiers { get; set; }
     public DbSet<PendingRequest> PendingRequests { get; set; }
     public DbSet<KycSubmission> KycSubmissions { get; set; } = null!;
+    public DbSet<KycApplication> KycApplications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

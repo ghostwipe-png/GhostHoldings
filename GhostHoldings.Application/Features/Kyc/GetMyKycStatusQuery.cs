@@ -1,10 +1,10 @@
-using GhostHoldings.Application.Interfaces;
 using MediatR;
+using GhostHoldings.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace GhostHoldings.Application.Features.Kyc;
 
-public record GetMyKycStatusQuery(Guid UserId) : IRequest<KycStatusDto?>;
+public record GetKycStatusQuery(Guid UserId) : IRequest<KycStatusDto>;
 
 public record KycStatusDto(
     string Status,
@@ -13,29 +13,24 @@ public record KycStatusDto(
     string? RejectionReason
 );
 
-public class GetMyKycStatusQueryHandler : IRequestHandler<GetMyKycStatusQuery, KycStatusDto?>
+public class GetKycStatusQueryHandler : IRequestHandler<GetKycStatusQuery, KycStatusDto>
 {
     private readonly IApplicationDbContext _context;
 
-    public GetMyKycStatusQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
+    public GetKycStatusQueryHandler(IApplicationDbContext context) => _context = context;
 
-    public async Task<KycStatusDto?> Handle(GetMyKycStatusQuery request, CancellationToken cancellationToken)
+    public async Task<KycStatusDto> Handle(GetKycStatusQuery request, CancellationToken cancellationToken)
     {
-        var latest = await _context.KycSubmissions
+        var kyc = await _context.KycApplications
             .Where(k => k.UserId == request.UserId)
             .OrderByDescending(k => k.SubmittedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (latest == null) return null;
+        if (kyc == null)
+        {
+            return new KycStatusDto("NotSubmitted", null, null, null);
+        }
 
-        return new KycStatusDto(
-            latest.Status,
-            latest.DocumentType,
-            latest.SubmittedAt,
-            latest.RejectionReason
-        );
+        return new KycStatusDto(kyc.Status, kyc.DocumentType, kyc.SubmittedAt, kyc.RejectionReason);
     }
 }
