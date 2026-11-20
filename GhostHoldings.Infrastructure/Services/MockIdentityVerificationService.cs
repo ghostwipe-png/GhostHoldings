@@ -25,4 +25,5 @@ public class MockIdentityVerificationService : IIdentityVerificationService
             true, 
             "Live verification coming soon! Your details have been securely recorded for review."
         );
-8}
+    } // 🔥 FIXED: Removed the rogue '8'
+}
