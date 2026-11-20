@@ -132,4 +132,21 @@ public class AuthController : ControllerBase
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    [HttpPost("login-biometric")]
+public async Task<IActionResult> LoginWithBiometric([FromBody] BiometricLoginDto request, CancellationToken cancellationToken)
+{
+    try 
+    {
+        var command = new LoginWithBiometricCommand(request.UserId);
+        var result = await _mediator.Send(command, cancellationToken);
+        return Ok(result);
+    } 
+    catch (Exception ex) 
+    {
+        return Unauthorized(new { Error = ex.Message });
+    }
+}
+
+public record BiometricLoginDto(Guid UserId);
 }
