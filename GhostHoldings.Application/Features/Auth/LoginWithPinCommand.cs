@@ -1,46 +1,77 @@
-using GhostHoldings.Application.Interfaces;
-using GhostHoldings.Domain.Entities;
 using MediatR;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using GhostHoldings.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace GhostHoldings.Application.Features.Auth;
 
-public record LoginWithPinCommand(Guid UserId, string Pin) : IRequest<LoginWithPinResult>;
-public record LoginWithPinResult(bool IsSuccess, string ErrorMessage = "", string? Email = null);
+public record LoginWithPinCommand(Guid UserId, string Pin) : IRequest<LoginResponse>;
 
-public class LoginWithPinCommandHandler : IRequestHandler<LoginWithPinCommand, LoginWithPinResult>
+// 🔥 Added LoginResponse record here so it's always available
+public record LoginResponse(string Token, string UserId, string Email, string Message);
+
+public class LoginWithPinCommandHandler : IRequestHandler<LoginWithPinCommand, LoginResponse>
 {
     private readonly IApplicationDbContext _context;
-    private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly IConfiguration _configuration;
 
-    public LoginWithPinCommandHandler(IApplicationDbContext context, IPasswordHasher<User> passwordHasher)
+    public LoginWithPinCommandHandler(IApplicationDbContext context, IConfiguration configuration)
     {
         _context = context;
-        _passwordHasher = passwordHasher;
+        _configuration = configuration;
     }
 
-    public async Task<LoginWithPinResult> Handle(LoginWithPinCommand request, CancellationToken cancellationToken)
+    public async Task<LoginResponse> Handle(LoginWithPinCommand request, CancellationToken cancellationToken)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+        var user = await _context.Users.FindAsync(new object[] { request.UserId }, cancellationToken)
+                   ?? throw new UnauthorizedAccessException("User not found.");
 
-        if (user == null || string.IsNullOrEmpty(user.PinHash))
+        if (string.IsNullOrEmpty(user.PinHash))
         {
-            return new LoginWithPinResult(false, "Invalid credentials or PIN not set.");
+            throw new UnauthorizedAccessException("PIN not set. Please login with email and password first.");
         }
 
-        if (user.IsLocked)
+        // Verify PIN using BCrypt
+        if (!BCrypt.Net.BCrypt.Verify(request.Pin, user.PinHash))
         {
-            return new LoginWithPinResult(false, "Your account has been suspended. Please contact support.");
+            throw new UnauthorizedAccessException("Invalid PIN.");
         }
 
-        // Verify the PIN hash
-        var result = _passwordHasher.VerifyHashedPassword(user, user.PinHash, request.Pin);
-        if (result == PasswordVerificationResult.Failed)
-        {
-            return new LoginWithPinResult(false, "Invalid PIN.");
-        }
+        // Generate JWT token
+        var token = GenerateJwtToken(user);
 
-        return new LoginWithPinResult(true, Email: user.Email);
+        return new LoginResponse(
+            token,
+            user.Id.ToString(),
+            user.Email,
+            "Login successful"
+        );
+    }
+
+    private string GenerateJwtToken(Domain.Entities.User user)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim("BiometricEnabled", user.BiometricEnabled.ToString())
+        };
+
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            expires: DateTime.Now.AddDays(30), // Long-lived for PIN/biometric login
+            signingCredentials: creds
+        );
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }

@@ -74,36 +74,21 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login-pin")]
-    public async Task<IActionResult> LoginWithPin([FromBody] LoginWithPinCommand command, CancellationToken cancellationToken)
+    public async Task<IActionResult> LoginWithPin([FromBody] PinLoginDto request, CancellationToken cancellationToken)
+{
+    try
     {
-        try
-        {
-            var result = await _mediator.Send(command, cancellationToken);
-
-            if (!result.IsSuccess || result.Email == null)
-            {
-                return Unauthorized(new { Error = result.ErrorMessage });
-            }
-
-            var token = GenerateJwtToken(command.UserId, result.Email);
-
-            return Ok(new 
-            { 
-                Token = token,
-                UserId = command.UserId,
-                Email = result.Email,
-                Message = "PIN login successful"
-            });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { 
-                Error = "Internal Server Error",
-                Detail = ex.Message,
-                InnerDetail = ex.InnerException?.Message
-            });
-        }
+        var command = new LoginWithPinCommand(request.UserId, request.Pin);
+        var result = await _mediator.Send(command, cancellationToken);
+        return Ok(result);
     }
+    catch (Exception ex)
+    {
+        return Unauthorized(new { Error = ex.Message });
+    }
+     }
+
+    public record PinLoginDto(Guid UserId, string Pin);
 
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordCommand command, CancellationToken cancellationToken)
