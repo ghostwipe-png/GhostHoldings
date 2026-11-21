@@ -77,6 +77,7 @@ try
     //builder.Services.AddHttpClient<IPaystackIdentityService, PaystackIdentityService>();
     // 🔥 ADD THIS LINE
     builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+    builder.Services.AddHttpClient<IMobitechSmsService, MobitechSmsService>();
     // 🔥 ADD THIS LINE (Replaces the old Paystack/SmileID registration)
     // 🔥 USE AddScoped INSTEAD OF AddHttpClient FOR THE MOCK SERVICE
     builder.Services.AddScoped<GhostHoldings.Application.Interfaces.IIdentityVerificationService, GhostHoldings.Infrastructure.Services.MockIdentityVerificationService>();
